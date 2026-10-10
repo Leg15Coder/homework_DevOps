@@ -1,0 +1,59 @@
+---
+- name: Настройка локального хоста для работы с Docker
+  hosts: web
+  become: true
+  vars:
+    user_name: deployer
+
+  tasks:
+    - name: Обновление списка пакетов apt
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Создание пользователя deployer
+      user:
+        name: "{{ user_name }}"
+        shell: /bin/bash
+        groups: sudo
+        append: yes
+        state: present
+
+    - name: Настройка sudo без пароля для deployer
+      copy:
+        content: "{{ user_name }} ALL=(ALL) NOPASSWD:ALL\n"
+        dest: "/etc/sudoers.d/{{ user_name }}"
+        mode: '0440'
+        validate: 'visudo -cf %s'
+
+    - name: Установка необходимых системных утилит
+      apt:
+        name:
+          - curl
+          - ca-certificates
+          - gnupg
+        state: present
+
+    - name: Установка Docker Engine и Docker Compose
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+
+    - name: Включение и запуск службы Docker
+      systemd:
+        name: docker
+        enabled: yes
+        state: started
+
+    - name: Добавление пользователей deployer и student в группу docker
+      user:
+        name: "{{ item }}"
+        groups: docker
+        append: yes
+      loop:
+        - "{{ user_name }}"
+        - student
