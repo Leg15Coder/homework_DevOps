@@ -1,0 +1,32 @@
+workflow:
+ rules:
+ - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH'
+ - when: never
+stages: [build, deploy]
+default:
+ tags: [my-shell]
+build_page:
+ stage: build
+ script:
+ - test -n "$SITE_TITLE"
+ - mkdir -p dist
+ - envsubst '${SITE_TITLE} ${CI_COMMIT_SHORT_SHA}' < index.html.template > dist/index.html
+ - test -s dist/index.html
+ - grep -Fq -- "$SITE_TITLE" dist/index.html
+ - grep -Fq -- "$CI_COMMIT_SHORT_SHA" dist/index.html
+ - '! grep -Fq ''${SITE_TITLE}'' dist/index.html'
+ artifacts:
+ paths: [dist/index.html]
+ expire_in: 1 day
+deploy_page:
+ stage: deploy
+ resource_group: runner-lab
+ rules:
+ - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+ when: manual
+ allow_failure: false
+ - when: never
+ script:
+ - install -m 0644 dist/index.html /var/www/runner-lab/index.html
+ - curl --fail --silent --show-error
+

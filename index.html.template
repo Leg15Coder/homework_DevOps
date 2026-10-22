@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="ru">
+<head>
+ <meta charset="utf-8">
+ <title>${SITE_TITLE}</title>
+</head>
+<body>
+ <h1>${SITE_TITLE}</h1>
+ <p>Версия: ${CI_COMMIT_SHORT_SHA}</p>
+ <p>Страница подготовлена GitLab Runner.</p>
+</body>
+</html>
+
