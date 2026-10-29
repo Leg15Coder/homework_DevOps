@@ -62,11 +62,11 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H "$TARGET_HOST" >> ~/.ssh/known_hosts
 
-          scp -r k8s "$TARGET_USER@$TARGET_HOST:/opt/gadgetstore/"
+          scp -r k8s "$TARGET_USER@$TARGET_HOST:~/gadgetstore/"
 
           ssh "$TARGET_USER@$TARGET_HOST" "
             export APP_VERSION='${GITHUB_SHA::7}' &&
-            kubectl apply -f /opt/gadgetstore/k8s/service.yaml &&
+            kubectl apply -f ~/gadgetstore/k8s/service.yaml &&
             kubectl set image deployment/gadgetstore-app app='$IMAGE' &&
             kubectl rollout status deployment/gadgetstore-app --timeout=180s
           "
