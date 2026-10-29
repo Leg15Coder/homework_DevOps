@@ -66,6 +66,7 @@ jobs:
 
           ssh "$TARGET_USER@$TARGET_HOST" "
             export APP_VERSION='${GITHUB_SHA::7}' &&
+            export KUBECONFIG=\$HOME/.kube/config &&
             kubectl apply -f ~/gadgetstore/k8s/service.yaml &&
             kubectl set image deployment/gadgetstore-app app='$IMAGE' &&
             kubectl rollout status deployment/gadgetstore-app --timeout=180s
