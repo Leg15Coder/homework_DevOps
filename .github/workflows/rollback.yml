@@ -1,0 +1,36 @@
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: "Revision number (optional)"
+        required: false
+        default: ""
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Rollback K3s deployment
+        env:
+          TARGET_HOST: ${{ secrets.TARGET_HOST }}
+          TARGET_USER: ${{ secrets.TARGET_USER }}
+          REVISION: ${{ github.event.inputs.revision }}
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "$TARGET_HOST" >> ~/.ssh/known_hosts
+
+          if [ -n "$REVISION" ]; then
+            ssh "$TARGET_USER@$TARGET_HOST" \
+              "kubectl rollout undo deployment/gadgetstore-app --to-revision=$REVISION"
+          else
+            ssh "$TARGET_USER@$TARGET_HOST" \
+              "kubectl rollout undo deployment/gadgetstore-app"
+          fi
+
+          ssh "$TARGET_USER@$TARGET_HOST" \
+            "kubectl rollout status deployment/gadgetstore-app"
+

@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gadgetstore-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gadgetstore
+  template:
+    metadata:
+      labels:
+        app: gadgetstore
+    spec:
+      containers:
+        - name: app
+          image: ghcr.io/leg15coder/homework_devops:latest
+          ports:
+            - containerPort: 5000
+          env:
+            - name: REDIS_HOST
+              value: "redis"
+            - name: DB_HOST
+              value: "postgres"
+            - name: DB_NAME
+              value: "gadgetstore"
+            - name: DB_USER
+              value: "gadget"
+            - name: DB_PASSWORD
+              value: "gadget123"
+            - name: APP_VERSION
+              value: "github-$(GITHUB_SHA)"
+
