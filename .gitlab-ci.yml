@@ -1,39 +1,32 @@
-workflow:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH'
-    - when: never
-
 stages:
   - build
   - deploy
+  - test
 
-default:
-  tags:
-    - my-shell
-
-build_page:
+# Этап 1: Сборка и публикация образа
+build_image:
   stage: build
+  image: docker:24.0
+  services:
+    - docker:24.0-dind
+  variables:
+    DOCKER_DRIVER: overlay2
   script:
-    - test -n "$SITE_TITLE"
-    - mkdir -p dist
-    - envsubst '${SITE_TITLE} ${CI_COMMIT_SHORT_SHA}' < index.html.template > dist/index.html
-    - test -s dist/index.html
-    - grep -Fq -- "$SITE_TITLE" dist/index.html
-    - grep -Fq -- "$CI_COMMIT_SHORT_SHA" dist/index.html
-    - '! grep -Fq ''${SITE_TITLE}'' dist/index.html'
-  artifacts:
-    paths:
-      - dist/index.html
-    expire_in: 1 day
+    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN registry.gitlab.com
+    - docker build -t registry.gitlab.com/$CI_PROJECT_PATH:$CI_COMMIT_SHORT_SHA .
+    - docker push registry.gitlab.com/$CI_PROJECT_PATH:$CI_COMMIT_SHORT_SHA
+  only:
+    - main
 
-deploy_page:
+# Этап 2: Деплой в тестовое окружение (Docker Compose)
+deploy_staging:
   stage: deploy
-  resource_group: runner-lab
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-      when: manual
-      allow_index: false # или ваши параметры
-    - when: never
+  image: alpine:latest
+  before_script:
+    - apk add openssh-client
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - echo "Host * StrictHostKeyChecking no" > ~/.ssh/config
   script:
-    - install -m 0644 dist/index.html /var/www/runner-lab/index.html
-    - curl --fail --silent --show-error http://127.0.0.1:9999
+    - ssh $TARGET_USER@$TARGET_HOST <
