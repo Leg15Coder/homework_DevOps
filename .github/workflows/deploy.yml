@@ -40,56 +40,145 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
-    deploy-k3s:
-      needs: build
-      runs-on: ubuntu-latest
+  deploy-k3s:
+    needs: build
+    runs-on: ubuntu-latest
 
-      steps:
-        - name: Checkout manifests
-          uses: actions/checkout@v4
+    steps:
+      - name: Checkout manifests
+        uses: actions/checkout@v4
 
-        - name: Add SSH key
-          uses: webfactory/ssh-agent@v0.9.0
-          with:
-            ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Add SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-        - name: Deploy to K3s
-          env:
-            TARGET_HOST: ${{ secrets.TARGET_HOST }}
-            TARGET_USER: ${{ secrets.TARGET_USER }}
-            IMAGE: ghcr.io/leg15coder/homework_devops:${{ github.sha }}
-          run: |
-            mkdir -p ~/.ssh
-            ssh-keyscan -H "$TARGET_HOST" >> ~/.ssh/known_hosts
+      - name: Deploy to K3s
+        env:
+          TARGET_HOST: ${{ secrets.TARGET_HOST }}
+          TARGET_USER: ${{ secrets.TARGET_USER }}
+          IMAGE: ghcr.io/leg15coder/homework_devops:${{ github.sha }}
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "$TARGET_HOST" >> ~/.ssh/known_hosts
 
-            # Копируем манифесты на сервер
-            scp -r k8s "$TARGET_USER@$TARGET_HOST:/opt/gadgetstore/"
+          scp -r k8s "$TARGET_USER@$TARGET_HOST:/opt/gadgetstore/"
 
-            # Применяем Service и Deployment
-            ssh "$TARGET_USER@$TARGET_HOST" "
-              export APP_VERSION='${GITHUB_SHA::7}' &&
-              kubectl apply -f /opt/gadgetstore/k8s/service.yaml &&
-              kubectl set image deployment/gadgetstore-app app='$IMAGE' &&
-              kubectl rollout status deployment/gadgetstore-app --timeout=180s
-           "
+          ssh "$TARGET_USER@$TARGET_HOST" "
+            export APP_VERSION='${GITHUB_SHA::7}' &&
+            kubectl apply -f /opt/gadgetstore/k8s/service.yaml &&
+            kubectl set image deployment/gadgetstore-app app='$IMAGE' &&
+            kubectl rollout status deployment/gadgetstore-app --timeout=180s
+          "
 
-    smoke-test:
-      needs: deploy-k3s
-      runs-on: ubuntu-latest
+  smoke-test:
+    needs: deploy-k3s
+    runs-on: ubuntu-latest
 
-      steps:
-        - name: Check application
-          env:
-            TARGET_HOST: ${{ secrets.TARGET_HOST }}
-          run: |
-            for i in $(seq 1 30); do
-              if curl -fsS "http://$TARGET_HOST:30080/api/products"; then
-                echo "Application is healthy"
-                exit 0
-              fi
-              echo "Waiting for application..."
-              sleep 5
-            done
-            echo "Smoke test failed"
-            exit 1
+    steps:
+      - name: Check application
+        env:
+          TARGET_HOST: ${{ secrets.TARGET_HOST }}
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS "http://$TARGET_HOST:30080/api/products"; then
+              echo "Application is healthy"
+              exit 0
+            fi
+            echo "Waiting for application..."
+            sleep 5
+          done
+          echo "Smoke test failed"
+          exit 1name: Build and deploy
+
+on:
+  push:
+    branches:
+      - main
+      - gadgetstore
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: leg15coder/homework_devops
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+  deploy-k3s:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout manifests
+        uses: actions/checkout@v4
+
+      - name: Add SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Deploy to K3s
+        env:
+          TARGET_HOST: ${{ secrets.TARGET_HOST }}
+          TARGET_USER: ${{ secrets.TARGET_USER }}
+          IMAGE: ghcr.io/leg15coder/homework_devops:${{ github.sha }}
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "$TARGET_HOST" >> ~/.ssh/known_hosts
+
+          scp -r k8s "$TARGET_USER@$TARGET_HOST:/opt/gadgetstore/"
+
+          ssh "$TARGET_USER@$TARGET_HOST" "
+            export APP_VERSION='${GITHUB_SHA::7}' &&
+            kubectl apply -f /opt/gadgetstore/k8s/service.yaml &&
+            kubectl set image deployment/gadgetstore-app app='$IMAGE' &&
+            kubectl rollout status deployment/gadgetstore-app --timeout=180s
+          "
+
+  smoke-test:
+    needs: deploy-k3s
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check application
+        env:
+          TARGET_HOST: ${{ secrets.TARGET_HOST }}
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS "http://$TARGET_HOST:30080/api/products"; then
+              echo "Application is healthy"
+              exit 0
+            fi
+            echo "Waiting for application..."
+            sleep 5
+          done
+          echo "Smoke test failed"
+          exit 1
 
